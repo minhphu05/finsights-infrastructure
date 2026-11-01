@@ -1,0 +1,8 @@
+data_volume_device: /dev/vdb
+data_volume_mountpoint: /srv/finsights-data
+data_volume_filesystem: ext4
+
+data_volume_mount_options: defaults,_netdev,nofail
+# Leave false. Set true only on the first run after positively identifying a new,
+# empty volume. Formatting a volume destroys all data currently on that device.
+initialize_data_volume: false

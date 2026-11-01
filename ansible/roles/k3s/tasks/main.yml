@@ -1,0 +1,117 @@
+---
+- name: Ensure K3s configuration directory exists
+  ansible.builtin.file:
+    path: "{{ k3s_config_path | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Configure K3s node (Server or Agent)
+  ansible.builtin.template:
+    src: config.yaml.j2
+    dest: "{{ k3s_config_path }}"
+    owner: root
+    group: root
+    mode: "0600"
+  notify: Restart K3s
+
+- name: Download the official K3s installer over HTTPS
+  ansible.builtin.get_url:
+    url: "{{ k3s_install_script_url }}"
+    dest: "{{ k3s_install_script_path }}"
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Read the installed K3s version when a binary is already present
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/k3s
+      - --version
+  register: k3s_installed_version
+  changed_when: false
+  failed_when: false
+
+# ------------------------------------------------------------------------------
+# Server (Control Plane) Installation
+# ------------------------------------------------------------------------------
+- name: Install or upgrade K3s Server release
+  ansible.builtin.command:
+    argv:
+      - /bin/sh
+      - "{{ k3s_install_script_path }}"
+  environment:
+    INSTALL_K3S_VERSION: "{{ k3s_version }}"
+    INSTALL_K3S_EXEC: server
+  when:
+    - (k3s_role | default('server')) == 'server'
+    - k3s_version not in (k3s_installed_version.stdout | default(""))
+  notify: Restart K3s
+
+- name: Ensure K3s server service is enabled and running
+  ansible.builtin.systemd_service:
+    name: k3s
+    enabled: true
+    state: started
+  when: (k3s_role | default('server')) == 'server'
+
+- name: Wait for local Kubernetes API endpoint on Control Plane
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ k3s_api_port }}"
+    delay: 3
+    timeout: 180
+  when: (k3s_role | default('server')) == 'server'
+
+- name: Read K3s server node token
+  ansible.builtin.slurp:
+    src: /var/lib/rancher/k3s/server/node-token
+  register: k3s_server_node_token_b64
+  when: (k3s_role | default('server')) == 'server'
+
+- name: Register k3s_node_token fact on Control Plane
+  ansible.builtin.set_fact:
+    k3s_node_token: "{{ k3s_server_node_token_b64.content | b64decode | trim }}"
+  when: (k3s_role | default('server')) == 'server'
+
+# ------------------------------------------------------------------------------
+# Agent (Worker) Installation
+# ------------------------------------------------------------------------------
+- name: Install or upgrade K3s Agent release
+  ansible.builtin.command:
+    argv:
+      - /bin/sh
+      - "{{ k3s_install_script_path }}"
+  environment:
+    INSTALL_K3S_VERSION: "{{ k3s_version }}"
+    INSTALL_K3S_EXEC: agent
+  when:
+    - (k3s_role | default('server')) == 'agent'
+    - k3s_version not in (k3s_installed_version.stdout | default(""))
+  notify: Restart K3s Agent
+
+- name: Ensure K3s agent service is enabled and running
+  ansible.builtin.systemd_service:
+    name: k3s-agent
+    enabled: true
+    state: started
+  when: (k3s_role | default('server')) == 'agent'
+
+# ------------------------------------------------------------------------------
+# Verification
+# ------------------------------------------------------------------------------
+- name: Check K3s cluster node readiness from Control Plane
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/k3s
+      - kubectl
+      - get
+      - nodes
+      - --no-headers
+  register: k3s_node_list
+  changed_when: false
+  retries: 15
+  delay: 10
+  until: k3s_node_list.rc == 0 and (k3s_node_list.stdout | length > 0)
+  when: (k3s_role | default('server')) == 'server'

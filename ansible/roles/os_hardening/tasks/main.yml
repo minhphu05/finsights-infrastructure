@@ -1,0 +1,52 @@
+---
+- name: Refresh APT metadata and install host administration packages
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+    name:
+      - ca-certificates
+      - chrony
+      - curl
+      - gnupg
+      - jq
+      - lsof
+      - parted
+      - ufw
+      - unattended-upgrades
+    state: present
+
+- name: Set host timezone
+  community.general.timezone:
+    name: "{{ os_timezone }}"
+
+- name: Ensure time synchronization is enabled
+  ansible.builtin.systemd_service:
+    name: chrony
+    enabled: true
+    state: started
+
+- name: Install bounded journald retention settings
+  ansible.builtin.template:
+    src: journald-finsights.conf.j2
+    dest: /etc/systemd/journald.conf.d/60-finsights.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart systemd-journald
+
+- name: Install hardened SSH daemon drop-in
+  ansible.builtin.template:
+    src: sshd-finsights.conf.j2
+    dest: /etc/ssh/sshd_config.d/60-finsights.conf
+    owner: root
+    group: root
+    mode: "0644"
+    validate: /usr/sbin/sshd -t -f %s
+  notify: Restart SSH daemon
+
+
+- name: Ensure unattended security updates are enabled
+  ansible.builtin.systemd_service:
+    name: unattended-upgrades
+    enabled: true
+    state: started

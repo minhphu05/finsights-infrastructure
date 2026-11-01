@@ -1,0 +1,44 @@
+---
+- name: Prepare Finsights Multi-Node Infrastructure
+  hosts: finsights_hosts
+  become: true
+  gather_facts: false
+
+  pre_tasks:
+    - name: Gather host facts after bootstrap packages are ready
+      ansible.builtin.setup:
+
+    - name: Confirm that Ansible reached a supported Ubuntu host
+      ansible.builtin.assert:
+        that:
+          - ansible_distribution == "Ubuntu"
+          - ansible_distribution_version is version("24.04", ">=")
+          - ansible_architecture in ["x86_64", "amd64", "aarch64", "arm64"]
+        fail_msg: >-
+          Finsights accepted production baseline is Ubuntu 24.04 LTS on x86_64 or ARM64.
+
+    - name: Validate management SSH CIDR
+      ansible.builtin.assert:
+        that:
+          - admin_ssh_cidr is match("^[0-9.]+/([0-9]|[12][0-9]|3[0-2])$")
+        fail_msg: >-
+          Set admin_ssh_cidr to a valid IPv4 CIDR (e.g. 0.0.0.0/0 or a specific /32).
+
+  roles:
+    - role: os_hardening
+    - role: storage_mount
+    - role: wireguard
+    - role: host_firewall
+    - role: docker_engine
+
+- name: Configure K3s Control Plane (Server)
+  hosts: finsights_control_plane
+  become: true
+  roles:
+    - role: k3s
+
+- name: Configure K3s Workers (Agents)
+  hosts: finsights_workers
+  become: true
+  roles:
+    - role: k3s

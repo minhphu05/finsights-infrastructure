@@ -1,0 +1,19 @@
+# Ansible generated files and secrets
+ansible/inventory/generated.yml
+ansible/inventory/*.retry
+ansible/vault-password-file
+**/vault.yml
+
+# Keys, certificates, and environment files
+*.pem
+*.key
+*.pub
+.env
+.env.*
+!.env.example
+
+# OS artifacts
+.DS_Store
+*.log
+benchmark-results/
+

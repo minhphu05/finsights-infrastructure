@@ -1,0 +1,4 @@
+---
+os_timezone: Asia/Ho_Chi_Minh
+os_journald_max_use: 512M
+os_journald_runtime_max_use: 256M

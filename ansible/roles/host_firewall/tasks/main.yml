@@ -1,0 +1,77 @@
+---
+- name: Set conservative UFW defaults without enabling the firewall yet
+  ansible.builtin.command:
+    argv:
+      - ufw
+      - default
+      - deny
+      - incoming
+  changed_when: false
+
+- name: Allow outbound package updates and image pulls
+  ansible.builtin.command:
+    argv:
+      - ufw
+      - default
+      - allow
+      - outgoing
+  changed_when: false
+
+- name: Allow SSH management ports
+  community.general.ufw:
+    rule: allow
+    from_ip: "{{ admin_ssh_cidr | default('0.0.0.0/0') }}"
+    to_port: "{{ item | string }}"
+    proto: tcp
+    comment: "SSH management port {{ item }}"
+  loop:
+    - "22"
+    - "8686"
+    - "{{ ansible_port | default(22) }}"
+
+- name: Allow WireGuard UDP traffic for inter-node mesh
+  community.general.ufw:
+    rule: allow
+    to_port: "{{ wireguard_port | default('51820') | string }}"
+    proto: udp
+    comment: WireGuard mesh tunnel
+
+- name: Allow internal traffic on WireGuard wg0 interface
+  community.general.ufw:
+    rule: allow
+    direction: in
+    interface: wg0
+    comment: WireGuard encrypted mesh internal traffic
+
+- name: Allow the Kubernetes API from WireGuard mesh network
+  community.general.ufw:
+    rule: allow
+    from_ip: "10.8.0.0/24"
+    to_port: "6443"
+    proto: tcp
+    comment: K3s API mesh access
+
+- name: Allow required K3s pod and service traffic through UFW
+  community.general.ufw:
+    rule: allow
+    from_ip: "{{ item }}"
+    comment: K3s pod or service network
+  loop:
+    - "{{ k3s_pod_cidr | default('10.42.0.0/16') }}"
+    - "{{ k3s_service_cidr | default('10.43.0.0/16') }}"
+
+- name: Allow public HTTP and HTTPS when enabled
+  community.general.ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+    comment: Public Finsights web ingress
+  loop:
+    - "80"
+    - "443"
+  when: enable_public_web_ingress | default(false) | bool
+
+- name: Enable UFW after all required management rules have been installed
+  community.general.ufw:
+    state: enabled
+    logging: low

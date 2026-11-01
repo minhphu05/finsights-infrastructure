@@ -1,0 +1,7 @@
+---
+# Pin collection versions so operator workstations resolve the same module APIs.
+collections:
+  - name: ansible.posix
+    version: 2.2.2
+  - name: community.general
+    version: 13.5.0

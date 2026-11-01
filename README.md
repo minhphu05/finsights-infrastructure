@@ -1,124 +1,88 @@
 # Finsights Infrastructure
 
-This repository provisions and manages the cloud infrastructure, inter-node networking, host operating systems, and Kubernetes runtime for **Finsights**.
+This repository provisions and manages the infrastructure, inter-node networking, host operating systems, and Kubernetes runtime for **Finsights**.
 
-The infrastructure spans across multiple Oracle Cloud Free Tier tenancies connected through an encrypted **WireGuard VPN mesh**, delivering **4 OCPU, 24 GB RAM, and 400 GB NVMe Storage** at zero cloud cost.
+The infrastructure runs on **2 dedicated VPS nodes** connected through an encrypted **WireGuard VPN mesh**, delivering **8 vCPU, 16 GB RAM, and 120 GB SSD Storage**.
 
 The repository stops at the host runtime boundary. [`finsights-platform-deployment`](../finsights-platform-deployment/) owns application workloads, Ingress routing, and container configurations. `finsights-core-db` owns database schemas and migrations.
 
 ---
 
-## 1. Multi-Node Cross-Tenancy Architecture
+## 1. 2-Node VPS Cluster Architecture
 
 ```text
  ┌────────────────────────────────────────────────────────────────────────┐
  │                           INTERNET (Public)                            │
- └───────────────────────────────────┬────────────────────────────────────┘
-                                     │ (Public Web 80/443 & SSH /32 only)
-                                     ▼
- ┌─────────────────────────────────────────┐           ┌─────────────────────────────────────────┐
- │   Node 1 (Account 1 - Tokyo - NRT)      │           │   Node 2 (Account 2 - Singapore - SIN)  │
- │   Public IP: Reserved                   │           │   Public IP: Reserved                   │
- │   VCN 1: 10.20.0.0/16 (Private: .10)    │           │   VCN 2: 10.30.0.0/16 (Private: .10)    │
- │  ┌───────────────────────────────────┐  │ WireGuard │  ┌───────────────────────────────────┐  │
- │  │ WireGuard VPN IP: 10.8.0.1/24     │◀─┼───────────┼─▶│ WireGuard VPN IP: 10.8.0.2/24     │  │
- │  └─────────────────┬─────────────────┘  │ (UDP:51820│  └─────────────────┬─────────────────┘  │
- │                    │                    │ encrypted)│                    │                    │
- │  • K3s Control Plane (Server)           │           │  • K3s Worker 2 (Agent)                 │
- │  • K3s Worker 1 (Flannel via wg0)       │           │  • Flannel CNI via wg0                  │
- │  • Ingress Controller (Ports 80/443)    │           │  • Dedicated PostgreSQL (Port 5432)     │
- │  • Data Volume 1: 150 GB (MinIO/Assets) │           │  • Data Volume 2: 150 GB (PG Data/WAL)  │
- └─────────────────────────────────────────┘           └─────────────────────────────────────────┘
+ └───────────────────┬────────────────────────────────┬───────────────────┘
+                     │ SSH Port 26567                 │ SSH Port 26566
+                     ▼                                ▼
+ ┌─────────────────────────────────────────┐      ┌─────────────────────────────────────────┐
+ │   Node 1 (Control Plane)                │      │   Node 2 (Worker + DB)                  │
+ │   Public IP: 103.249.117.232            │      │   Public IP: 103.249.117.201            │
+ │   SSH Port: 26567 (internal 8686)       │      │   SSH Port: 26566 (internal 8686)       │
+ │   4 vCPU, 8 GB RAM, 60 GB SSD           │      │   4 vCPU, 8 GB RAM, 60 GB SSD           │
+ │  ┌───────────────────────────────────┐  │      │  ┌───────────────────────────────────┐  │
+ │  │ WireGuard VPN IP: 10.8.0.1/24     │◀─┼──────┼─▶│ WireGuard VPN IP: 10.8.0.2/24     │  │
+ │  └─────────────────┬─────────────────┘  │      │  └─────────────────┬─────────────────┘  │
+ │                    │                    │      │                    │                    │
+ │  • K3s Control Plane (Server)           │      │  • K3s Worker (Agent)                   │
+ │  • Flannel CNI via wg0                  │      │  • Flannel CNI via wg0                  │
+ │  • Ingress Controller (Ports 80/443)    │      │  • PostgreSQL / Database Container      │
+ │  • Data directory: /srv/finsights-data  │      │  • Data directory: /srv/finsights-data  │
+ └─────────────────────────────────────────┘      └─────────────────────────────────────────┘
 ```
 
 ### Resource Allocation Matrix
 
-| Node | Tenancy / Region | RAM | OCPU | Storage | Role & Workload Distribution |
+| Node | Host IP | SSH Port | Specs | WireGuard IP | Role & Workload Distribution |
 |---|---|---|---|---|---|
-| **Node 1** | Account 1 (`ap-tokyo-1`) | 12 GB | 2 | 50 GB Boot + 150 GB Block | **K3s Control Plane + Worker 1**<br>• Ingress Controller (HTTP/HTTPS)<br>• Stateless web/API workloads<br>• MinIO / Object Storage mount |
-| **Node 2** | Account 2 (`ap-singapore-1`) | 12 GB | 2 | 50 GB Boot + 150 GB Block | **K3s Worker 2 + Dedicated DB**<br>• Dedicated PostgreSQL (binds to `10.8.0.2`)<br>• Background workers / batch jobs<br>• Dedicated 150 GB DB volume |
-| **Total** | 2 Accounts | **24 GB** | **4** | **400 GB** | **High-efficiency, decoupled data & compute** |
+| **Node 1** | `103.249.117.232` | `26567` | 4 vCPU, 8 GB RAM, 60 GB SSD | `10.8.0.1` | **K3s Control Plane (Server)**<br>• Ingress Controller (HTTP/HTTPS)<br>• Data directory (`/srv/finsights-data`) |
+| **Node 2** | `103.249.117.201` | `26566` | 4 vCPU, 8 GB RAM, 60 GB SSD | `10.8.0.2` | **K3s Worker (Agent) + Dedicated PostgreSQL**<br>• Database storage (`/srv/finsights-data`)<br>• Application background services |
+| **Total** | **2 VPS Nodes** | - | **8 vCPU, 16 GB RAM, 120 GB SSD** | `10.8.0.0/24` | **Encrypted high-performance 2-node cluster** |
 
 ---
 
-## 2. Scale-Out Mechanism for Future Nodes
-
-The infrastructure is intentionally designed to scale horizontally across any number of Oracle Cloud or external accounts:
-
-1. **Network**: Every node participates in a WireGuard mesh interface (`wg0`). Node 1 is `10.8.0.1`, Node 2 is `10.8.0.2`. Adding a Node 3 simply assigns `10.8.0.3` and registers peers. All Kubernetes and database traffic flows encrypted through `wg0`.
-2. **K3s Clustering**: Node 1 acts as the K3s server. Any new node automatically joins the cluster as a `k3s-agent` using the internal WireGuard endpoint `https://10.8.0.1:6443` and join token.
-3. **Workload Scheduling**: Nodes are tagged with roles (`role=control-plane-worker`, `role=storage-worker`). Workloads target appropriate nodes via `nodeSelector` / `tolerations`.
-4. **Persistent Storage**: Persistent volumes are bound to specific host mount points (`/srv/finsights-data`), keeping PostgreSQL data decoupled from web application lifecycle.
-
----
-
-## 3. Repository Map
+## 2. Repository Structure
 
 | Path | Responsibility |
 |---|---|
-| `.oci/` | OCI authentication profiles (`account1`, `account2`) and API keys (Git-ignored) |
-| `terraform/modules/` | Reusable OCI modules: `network` (with WireGuard UDP 51820 rule), `compute`, `storage` |
-| `terraform/environments/prod` | Production composition managing Node 1 and Node 2 across accounts |
-| `ansible/roles/wireguard` | Automated WireGuard key generation and cross-node mesh configuration |
-| `ansible/roles/k3s` | Installs K3s Server on Node 1 and K3s Agent on Node 2 over WireGuard |
-| `ansible/roles/storage_mount` | Formats and mounts the 150 GB volume to `/srv/finsights-data` |
-| `ansible/roles/host_firewall` | Hardened UFW configuration (SSH /32, WireGuard UDP 51820, internal `wg0`) |
-| `ansible/roles/docker_engine` | Docker Engine + Compose plugin for standalone database containers |
-| `scripts/render-ansible-inventory.sh` | Dynamically builds multi-node inventory from Terraform state |
+| `.github/workflows/infra-deploy.yml` | GitHub Actions CI/CD pipeline for automated provisioning |
+| `ansible/ansible.cfg` | Ansible configuration with optimized SSH connection parameters |
+| `ansible/inventory/production.yml` | Production inventory for the 2 VPS nodes |
+| `ansible/playbooks/site.yml` | Master playbook executing baseline OS hardening, WireGuard, Docker, and K3s |
+| `ansible/roles/os_hardening` | Security hardening, journald limits, SSH hardening (key-only root login) |
+| `ansible/roles/host_firewall` | UFW rules allowing SSH (8686/22/custom), WireGuard (51820 UDP), K3s (6443) |
+| `ansible/roles/wireguard` | Automated WireGuard key generation and cross-node mesh configuration (`wg0`) |
+| `ansible/roles/docker_engine` | Docker Engine + Compose plugin (dynamic x86_64 / arm64 support) |
+| `ansible/roles/storage_mount` | Sets up `/srv/finsights-data` storage directory with strict permissions |
+| `ansible/roles/k3s` | Installs K3s Server on Node 1 and K3s Agent on Node 2 over WireGuard mesh |
+| `scripts/render-ansible-inventory.sh` | Builds `production.yml` inventory from environment variables |
 | `scripts/vm-healthcheck.sh` | Inspects node health, CPU/RAM, WireGuard `wg0`, K3s, and storage |
 
 ---
 
-## 4. Deployment Workflow
+## 3. Deployment Workflow
 
-### Step 1: Provision Cloud Resources via Terraform
-```bash
-cd terraform/environments/prod
+### Automated CI/CD (GitHub Actions)
+Deployments are automated through GitHub Actions:
+1. Store the SSH private key in GitHub repository Secrets as `SSH_PRIVATE_KEY`.
+2. Push changes to `main` branch or trigger manually via **Actions > Deploy Finsights Infrastructure > Run workflow**.
 
-# 1. Initialize modules and providers
-terraform init
-
-# 2. Plan and review changes (26 resources to add across 2 tenancies)
-terraform plan -out=finsights-prod.tfplan
-
-# 3. Apply the reviewed plan
-terraform apply finsights-prod.tfplan
-```
-
-### Step 2: Configure Nodes via Ansible
-```bash
-cd ../../..
-
-# 1. Export local private SSH key path (corresponding to ssh_public_key in tfvars)
-export FINSIGHTS_SSH_PRIVATE_KEY="$HOME/.ssh/id_rsa"
-
-# 2. Generate multi-node inventory from Terraform outputs
-./scripts/render-ansible-inventory.sh prod
-
-# 3. Execute Ansible playbook (formats empty 150 GB volumes on first run)
-ansible-playbook ansible/playbooks/site.yml -e initialize_data_volume=true
-```
-*(On subsequent runs, omit `-e initialize_data_volume=true` to preserve existing data).*
-
----
-
-## 5. Verification & Health Check
-
-After deployment, verify the cluster:
+### Manual / Local Execution
+To deploy or update nodes directly:
 
 ```bash
-# 1. SSH into Node 1 (Tokyo)
-ssh -i ~/.ssh/id_rsa ubuntu@<node1_public_ip>
+# 1. Ensure private key is available
+export ANSIBLE_SSH_KEY_FILE="~/.ssh/finsights_vps"
 
-# Check WireGuard mesh connectivity
-sudo wg show
-ping -c 3 10.8.0.2
-
-# Check K3s cluster nodes
-sudo k3s kubectl get nodes -o wide
-
-# Run local health check
-./scripts/vm-healthcheck.sh
+# 2. Run Ansible playbook
+cd ansible
+ansible-playbook -i inventory/production.yml playbooks/site.yml
 ```
 
-Both `finsights-prod-node-01` and `finsights-prod-node-02` will appear as **Ready** in `kubectl get nodes`!
+### Healthcheck Verification
+Check cluster and node readiness on the Control Plane:
+
+```bash
+ssh -i ~/.ssh/finsights_vps -p 26567 root@103.249.117.232 "k3s kubectl get nodes -o wide"
+```

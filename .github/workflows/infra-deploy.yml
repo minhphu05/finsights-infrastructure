@@ -1,0 +1,61 @@
+name: Deploy Finsights Infrastructure
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'ansible/**'
+      - '.github/workflows/infra-deploy.yml'
+  workflow_dispatch:
+    inputs:
+      ansible_tags:
+        description: 'Ansible tags to execute (optional)'
+        required: false
+        default: 'all'
+
+jobs:
+  deploy:
+    name: Provision & Configure VPS Nodes
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Ansible
+        run: |
+          python -m pip install --upgrade pip
+          pip install ansible
+
+      - name: Install Ansible Galaxy Collections
+        run: |
+          ansible-galaxy collection install -r ansible/requirements.yml
+
+      - name: Configure SSH Key
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          echo "${SSH_PRIVATE_KEY}" > ~/.ssh/finsights_vps
+          chmod 600 ~/.ssh/finsights_vps
+
+      - name: Verify Ansible Playbook Syntax
+        run: |
+          ansible-playbook -i ansible/inventory/production.yml ansible/playbooks/site.yml --syntax-check
+
+      - name: Execute Ansible Playbook
+        env:
+          ANSIBLE_FORCE_COLOR: '1'
+        run: |
+          ansible-playbook -i ansible/inventory/production.yml ansible/playbooks/site.yml
+
+      - name: Run Cluster Healthcheck
+        run: |
+          ssh -i ~/.ssh/finsights_vps -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -p 26567 root@103.249.117.232 "k3s kubectl get nodes -o wide"

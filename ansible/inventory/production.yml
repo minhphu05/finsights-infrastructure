@@ -1,0 +1,32 @@
+---
+all:
+  vars:
+    ansible_ssh_private_key_file: "{{ lookup('env', 'ANSIBLE_SSH_KEY_FILE') | default('~/.ssh/finsights_vps', true) }}"
+    ansible_ssh_common_args: "-o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+    admin_ssh_cidr: "0.0.0.0/0"
+    wireguard_port: 51820
+  children:
+    finsights_control_plane:
+      hosts:
+        finsights-prod-node-01:
+          ansible_host: 103.249.117.232
+          ansible_port: 26567
+          ansible_user: root
+          wireguard_ip: "10.8.0.1/24"
+          wireguard_endpoint: "103.249.117.232"
+          k3s_role: server
+          has_data_volume: false
+    finsights_workers:
+      hosts:
+        finsights-prod-node-02:
+          ansible_host: 103.249.117.201
+          ansible_port: 26566
+          ansible_user: root
+          wireguard_ip: "10.8.0.2/24"
+          wireguard_endpoint: "103.249.117.201"
+          k3s_role: agent
+          has_data_volume: false
+    finsights_hosts:
+      children:
+        finsights_control_plane:
+        finsights_workers:

@@ -1,0 +1,17 @@
+[Interface]
+Address = {{ wireguard_ip }}
+ListenPort = {{ wireguard_port | default(51820) }}
+PrivateKey = {{ wg_private_key.stdout }}
+SaveConfig = false
+
+{% for peer in groups['finsights_hosts'] %}
+{% if peer != inventory_hostname and hostvars[peer]['wireguard_public_key'] is defined %}
+[Peer]
+# Node: {{ peer }}
+PublicKey = {{ hostvars[peer]['wireguard_public_key'] }}
+Endpoint = {{ hostvars[peer]['wireguard_endpoint'] }}:{{ wireguard_port | default(51820) }}
+AllowedIPs = {{ hostvars[peer]['wireguard_ip'] | regex_replace('/[0-9]+$', '/32') }}
+PersistentKeepalive = 25
+
+{% endif %}
+{% endfor %}

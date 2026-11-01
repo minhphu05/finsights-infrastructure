@@ -1,0 +1,36 @@
+---
+# Template for VPS nodes.
+# Copy this file to generated.yml or production.yml and replace placeholders.
+all:
+  vars:
+    ansible_ssh_private_key_file: "~/.ssh/finsights_vps"
+    ansible_ssh_common_args: "-o IdentitiesOnly=yes -o StrictHostKeyChecking=no"
+    admin_ssh_cidr: "0.0.0.0/0"
+    wireguard_port: 51820
+  children:
+    finsights_control_plane:
+      hosts:
+        finsights-prod-node-01:
+          ansible_host: "<node1-public-ip>"
+          ansible_port: 26567
+          ansible_user: root
+          wireguard_ip: "10.8.0.1/24"
+          wireguard_endpoint: "<node1-public-ip>"
+          k3s_role: server
+          has_data_volume: false
+
+    finsights_workers:
+      hosts:
+        finsights-prod-node-02:
+          ansible_host: "<node2-public-ip>"
+          ansible_port: 26566
+          ansible_user: root
+          wireguard_ip: "10.8.0.2/24"
+          wireguard_endpoint: "<node2-public-ip>"
+          k3s_role: agent
+          has_data_volume: false
+
+    finsights_hosts:
+      children:
+        finsights_control_plane:
+        finsights_workers:

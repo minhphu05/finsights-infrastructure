@@ -1,0 +1,12 @@
+# Finsights host SSH baseline. Keep key-based management access enabled for root.
+Port 8686
+Port 22
+PermitRootLogin prohibit-password
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PubkeyAuthentication yes
+PermitTunnel yes
+X11Forwarding no
+AllowTcpForwarding yes
+ClientAliveInterval 300
+ClientAliveCountMax 2

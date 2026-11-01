@@ -1,0 +1,97 @@
+---
+- name: Ensure the Finsights data directory exists
+  ansible.builtin.file:
+    path: "{{ data_volume_mountpoint | default('/srv/finsights-data') }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+
+- name: Manage dedicated block storage when enabled
+  when: has_data_volume | default(false) | bool
+  block:
+    - name: Check that the configured block device exists
+      ansible.builtin.stat:
+        path: "{{ data_volume_device }}"
+        follow: true
+      register: data_volume_device_stat
+
+    - name: Stop if the configured data volume device is missing
+      ansible.builtin.assert:
+        that:
+          - data_volume_device_stat.stat.exists
+          - data_volume_device_stat.stat.isblk | default(false)
+        fail_msg: >-
+          {{ data_volume_device }} is not a block device. Inspect lsblk before proceeding.
+
+    - name: Read the existing filesystem type without changing the disk
+      ansible.builtin.command:
+        argv:
+          - blkid
+          - -s
+          - TYPE
+          - -o
+          - value
+          - "{{ data_volume_device }}"
+      register: data_volume_existing_fs
+      changed_when: false
+      failed_when: data_volume_existing_fs.rc not in [0, 2]
+
+    - name: Check whether the data volume is already mounted
+      ansible.builtin.command:
+        argv:
+          - lsblk
+          - -nro
+          - MOUNTPOINT
+          - "{{ data_volume_device }}"
+      register: data_volume_existing_mount
+      changed_when: false
+
+    - name: Refuse to mount a filesystem that differs from the declared type
+      ansible.builtin.assert:
+        that:
+          - data_volume_existing_fs.stdout | trim == data_volume_filesystem
+        fail_msg: >-
+          {{ data_volume_device }} already contains a {{ data_volume_existing_fs.stdout | trim }} filesystem.
+      when:
+        - data_volume_existing_fs.rc == 0
+
+    - name: Format a confirmed blank block volume as ext4
+      ansible.builtin.command:
+        argv:
+          - mkfs.ext4
+          - -F
+          - -m
+          - "0"
+          - "{{ data_volume_device }}"
+      when:
+        - data_volume_existing_fs.rc != 0
+        - initialize_data_volume | bool
+
+    - name: Require explicit initialization for a blank volume
+      ansible.builtin.fail:
+        msg: >-
+          {{ data_volume_device }} has no filesystem. Rerun with -e initialize_data_volume=true.
+      when:
+        - data_volume_existing_fs.rc != 0
+        - not (initialize_data_volume | bool)
+
+    - name: Read the data volume UUID after inspection or formatting
+      ansible.builtin.command:
+        argv:
+          - blkid
+          - -s
+          - UUID
+          - -o
+          - value
+          - "{{ data_volume_device }}"
+      register: data_volume_uuid
+      changed_when: false
+
+    - name: Mount the data volume by UUID and persist it across reboots
+      ansible.posix.mount:
+        path: "{{ data_volume_mountpoint }}"
+        src: "UUID={{ data_volume_uuid.stdout | trim }}"
+        fstype: "{{ data_volume_filesystem }}"
+        opts: "{{ data_volume_mount_options }}"
+        state: mounted

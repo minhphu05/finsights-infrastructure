@@ -1,0 +1,19 @@
+# K3s configuration for Finsights cluster node: {{ inventory_hostname }}
+node-ip: "{{ wireguard_ip.split('/')[0] }}"
+flannel-iface: "wg0"
+
+{% if k3s_role | default('server') == 'server' %}
+advertise-address: "{{ wireguard_ip.split('/')[0] }}"
+https-listen-port: {{ k3s_api_port }}
+write-kubeconfig-mode: "0600"
+secrets-encryption: true
+cluster-cidr: {{ k3s_pod_cidr }}
+service-cidr: {{ k3s_service_cidr }}
+tls-san:
+  - "{{ wireguard_ip.split('/')[0] }}"
+  - "127.0.0.1"
+  - "{{ ansible_host }}"
+{% else %}
+server: "https://10.8.0.1:{{ k3s_api_port }}"
+token: "{{ hostvars[groups['finsights_control_plane'][0]]['k3s_node_token'] }}"
+{% endif %}

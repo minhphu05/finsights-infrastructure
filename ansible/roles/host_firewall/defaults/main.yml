@@ -1,0 +1,6 @@
+---
+admin_ssh_cidr: ""
+vcn_cidr: 10.20.0.0/16
+k3s_pod_cidr: 10.42.0.0/16
+k3s_service_cidr: 10.43.0.0/16
+enable_public_web_ingress: false
