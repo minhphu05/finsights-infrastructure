@@ -2,7 +2,7 @@
 
 ## Trách nhiệm
 
-Repo này quản lý hạ tầng 2 VPS và cấu hình nền của máy chủ: mạng WireGuard mesh, firewall/SSH, OS hardening, Docker Engine, K3s Kubernetes runtime, CI/CD và tài liệu vận hành.
+Repo này quản lý hạ tầng 2 VPS và cấu hình nền của máy chủ: mạng Tailscale mesh, firewall/SSH, OS hardening, Docker Engine, K3s Kubernetes runtime, CI/CD và tài liệu vận hành.
 
 Repo này **không** trực tiếp triển khai API/frontend hay application workload. Tất cả microservices, Ingress/Cloudflare Tunnel, PostgreSQL container/StatefulSet sẽ được triển khai bằng Helm charts từ repo `finsights-platform-deployment`.
 
@@ -30,8 +30,7 @@ finsights-infrastructure/
 │       ├── os_hardening/{defaults,handlers,tasks}/main.yml
 │       │   └── templates/{journald-finsights.conf.j2,sshd-finsights.conf.j2}
 │       ├── storage_mount/{defaults,tasks}/main.yml
-│       └── wireguard/{defaults,handlers,tasks}/main.yml
-│           └── templates/wg0.conf.j2
+│       └── tailscale/{defaults,tasks}/main.yml
 
 ├── scripts/
 │   ├── render-ansible-inventory.sh
@@ -67,7 +66,7 @@ finsights-infrastructure/
 |---|---|
 | `finsights-frontend` | Web app frontend (host trên Vercel) |
 | `finsights-backend` | REST API, business logic, authentication, worker jobs |
-| `finsights-infrastructure` | Setup VPS, mạng WireGuard mesh, OS hardening, K3s runtime, CI/CD |
+| `finsights-infrastructure` | Setup VPS, mạng Tailscale mesh, OS hardening, K3s runtime, CI/CD |
 | `finsights-core-db` | Database schema, migrations, constraints và seed |
 | `finsights-platform-deployment` | Helm charts triển khai ứng dụng và các dịch vụ nền tảng lên K3s |
 | `finsights-ai` | AI orchestration, RAG, Agents và LLM pipelines |

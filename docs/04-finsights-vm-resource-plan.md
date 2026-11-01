@@ -8,8 +8,8 @@
 
 - **Node 1 (Control Plane):** `103.249.117.232`, SSH Port `26567`, 4 vCPU, 8 GB RAM, 60 GB SSD. Đảm nhiệm K3s Server, Ingress routing, web traffic.
 - **Node 2 (Worker + DB):** `103.249.117.201`, SSH Port `26566`, 4 vCPU, 8 GB RAM, 60 GB SSD. Đảm nhiệm K3s Agent, PostgreSQL database container, background workers.
-- **Mạng nội bộ:** WireGuard VPN Mesh mã hóa (`10.8.0.1/24` <-> `10.8.0.2/24`). Mọi giao tiếp giữa K3s Server và Agent đều đi qua interface `wg0`.
-- **Ranh giới repo:** `finsights-infrastructure` quản lý OS hardening, Docker Engine, K3s runtime, WireGuard VPN mesh và CI/CD. `finsights-platform-deployment` quản lý triển khai ứng dụng K3s và container.
+- **Mạng nội bộ:** Tailscale VPN Mesh mã hóa (`tailscale0`). Mọi giao tiếp giữa K3s Server và Agent đều đi qua mạng mã hóa riêng biệt, tự động vượt qua giới hạn NAT của VPS.
+- **Ranh giới repo:** `finsights-infrastructure` quản lý OS hardening, Docker Engine, K3s runtime, Tailscale VPN mesh và CI/CD. `finsights-platform-deployment` quản lý triển khai ứng dụng K3s và container.
 
 ## 2. Phân bổ RAM trên từng VPS (8 GB RAM mỗi máy)
 

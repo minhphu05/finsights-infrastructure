@@ -14,7 +14,7 @@
     owner: root
     group: root
     mode: "0600"
-  notify: Restart K3s
+  notify: "{{ 'Restart K3s' if (k3s_role | default('server')) == 'server' else 'Restart K3s Agent' }}"
 
 - name: Download the official K3s installer over HTTPS
   ansible.builtin.get_url:

@@ -23,11 +23,11 @@ elif systemctl list-unit-files | grep -q "k3s-agent.service"; then
   check_service k3s-agent
 fi
 
-# Check WireGuard if configured
-if ip link show wg0 >/dev/null 2>&1; then
-  printf 'PASS  interface %-20s up\n' "wg0 (WireGuard)"
+# Check Tailscale if configured
+if ip link show tailscale0 >/dev/null 2>&1; then
+  printf 'PASS  interface %-20s up\n' "tailscale0 (Tailscale Mesh)"
 else
-  printf 'WARN  interface %-20s not found\n' "wg0 (WireGuard)"
+  printf 'WARN  interface %-20s not found\n' "tailscale0 (Tailscale Mesh)"
 fi
 
 CPU_COUNT="$(nproc)"

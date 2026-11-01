@@ -25,7 +25,7 @@ Cụm gồm 2 VPS độc lập:
    - Cập nhật địa chỉ IP và SSH port vào [ansible/inventory/production.yml](file:///Users/kittnguyen/Documents/Project/Personal/finsights/finsights-infrastructure/ansible/inventory/production.yml).
 2. **Triển khai hạ tầng tự động qua Ansible / CI-CD:**
    - Chạy workflow GitHub Actions `.github/workflows/infra-deploy.yml` hoặc chạy playbook `site.yml`.
-   - Toàn bộ WireGuard mesh, K3s Server, K3s Agent và phân quyền `/srv/finsights-data` sẽ tự động được thiết lập lại từ đầu.
+   - Toàn bộ Tailscale mesh, K3s Server, K3s Agent và phân quyền `/srv/finsights-data` sẽ tự động được thiết lập lại từ đầu.
 3. **Khôi phục ứng dụng & Dữ liệu:**
    - Chạy pipeline deploy từ repo Helm charts (`finsights-platform-deployment`).
    - Khôi phục bản dump PostgreSQL gần nhất từ Cloudflare R2 / S3.

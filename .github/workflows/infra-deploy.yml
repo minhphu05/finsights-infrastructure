@@ -53,6 +53,7 @@ jobs:
       - name: Execute Ansible Playbook
         env:
           ANSIBLE_FORCE_COLOR: '1'
+          TAILSCALE_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
         run: |
           ansible-playbook -i ansible/inventory/production.yml ansible/playbooks/site.yml
 

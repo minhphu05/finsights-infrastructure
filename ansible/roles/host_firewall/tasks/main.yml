@@ -17,6 +17,12 @@
       - outgoing
   changed_when: false
 
+- name: Ensure UFW forward policy is set to ACCEPT for Kubernetes pod networking
+  ansible.builtin.lineinfile:
+    path: /etc/default/ufw
+    regexp: '^DEFAULT_FORWARD_POLICY='
+    line: 'DEFAULT_FORWARD_POLICY="ACCEPT"'
+
 - name: Allow SSH management ports
   community.general.ufw:
     rule: allow
@@ -29,27 +35,27 @@
     - "8686"
     - "{{ ansible_port | default(22) }}"
 
-- name: Allow WireGuard UDP traffic for inter-node mesh
+- name: Allow Tailscale direct UDP traffic
   community.general.ufw:
     rule: allow
-    to_port: "{{ wireguard_port | default('51820') | string }}"
+    to_port: "41641"
     proto: udp
-    comment: WireGuard mesh tunnel
+    comment: Tailscale peer-to-peer UDP
 
-- name: Allow internal traffic on WireGuard wg0 interface
+- name: Allow internal traffic on Tailscale interface
   community.general.ufw:
     rule: allow
     direction: in
-    interface: wg0
-    comment: WireGuard encrypted mesh internal traffic
+    interface: tailscale0
+    comment: Tailscale encrypted mesh internal traffic
 
-- name: Allow the Kubernetes API from WireGuard mesh network
+- name: Allow Kubernetes API from Tailscale mesh network
   community.general.ufw:
     rule: allow
-    from_ip: "10.8.0.0/24"
+    from_ip: "100.64.0.0/10"
     to_port: "6443"
     proto: tcp
-    comment: K3s API mesh access
+    comment: K3s API Tailscale mesh access
 
 - name: Allow required K3s pod and service traffic through UFW
   community.general.ufw:

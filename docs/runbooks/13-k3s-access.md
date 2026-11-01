@@ -1,6 +1,6 @@
 # Runbook: Truy cập và quản trị cụm K3s an toàn
 
-K3s API server lắng nghe trên cổng `6443` và được bảo vệ bởi UFW (chỉ cho phép truy cập qua mạng nội bộ WireGuard `10.8.0.0/24` hoặc localhost).
+K3s API server lắng nghe trên cổng `6443` và được bảo vệ bởi UFW (chỉ cho phép truy cập qua mạng nội bộ Tailscale `100.64.0.0/10` hoặc localhost).
 
 ## 1. Truy cập trực tiếp từ Node 1 (Control Plane)
 
@@ -26,4 +26,4 @@ kubectl get nodes
 ## 3. Quản trị từ repo Helm Charts (CI/CD)
 
 - Cung cấp nội dung file `kubeconfig.yaml` cho GitHub Actions Secret của repo Helm (`KUBECONFIG_DATA`).
-- Trong CI/CD của repo Helm, kết nối tới K3s API thông qua WireGuard runner hoặc SSH bastion port forwarding để chạy `helm upgrade --install`.
+- Trong CI/CD của repo Helm, kết nối tới K3s API thông qua Tailscale runner hoặc SSH bastion port forwarding để chạy `helm upgrade --install`.

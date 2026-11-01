@@ -14,8 +14,9 @@ This document describes the Ansible baseline applied to the Ubuntu 24.04 LTS (x8
 - UFW policy: Deny incoming by default, allow outgoing.
 - Rules configured before UFW is enabled:
   - SSH management ports: `8686`, `22`, and custom node ports (`26567`, `26566`).
-  - WireGuard mesh: UDP port `51820` and all traffic on internal interface `wg0`.
-  - K3s API: TCP port `6443` restricted to WireGuard mesh network (`10.8.0.0/24`).
+  - Tailscale mesh: UDP port `41641` and all incoming traffic on internal interface `tailscale0`.
+  - K3s API: TCP port `6443` restricted to Tailscale mesh network (`100.64.0.0/10`).
+  - UFW default forward policy: Set to `ACCEPT` in `/etc/default/ufw` for Flannel pod routing over Tailscale.
   - K3s internal CNI: Pod CIDR (`10.42.0.0/16`) and Service CIDR (`10.43.0.0/16`).
   - Web ingress: Optional TCP `80` and `443`.
 

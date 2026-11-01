@@ -22,7 +22,7 @@ all:
     ansible_ssh_private_key_file: "${SSH_KEY}"
     ansible_ssh_common_args: "-o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
     admin_ssh_cidr: "0.0.0.0/0"
-    wireguard_port: 51820
+    tailscale_authkey: "{{ lookup('env', 'TAILSCALE_AUTHKEY') | default('', true) }}"
   children:
     finsights_control_plane:
       hosts:
@@ -30,8 +30,6 @@ all:
           ansible_host: "${NODE1_IP}"
           ansible_port: ${NODE1_PORT}
           ansible_user: root
-          wireguard_ip: "10.8.0.1/24"
-          wireguard_endpoint: "${NODE1_IP}"
           k3s_role: server
           has_data_volume: false
 
@@ -41,8 +39,6 @@ all:
           ansible_host: "${NODE2_IP}"
           ansible_port: ${NODE2_PORT}
           ansible_user: root
-          wireguard_ip: "10.8.0.2/24"
-          wireguard_endpoint: "${NODE2_IP}"
           k3s_role: agent
           has_data_volume: false
 

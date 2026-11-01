@@ -27,7 +27,7 @@
   roles:
     - role: os_hardening
     - role: storage_mount
-    - role: wireguard
+    - role: tailscale
     - role: host_firewall
     - role: docker_engine
 
