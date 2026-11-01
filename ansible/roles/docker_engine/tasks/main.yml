@@ -47,6 +47,11 @@
     state: present
     update_cache: true
     cache_valid_time: 3600
+    lock_timeout: 600
+  register: docker_apt_install
+  retries: 5
+  delay: 10
+  until: docker_apt_install is success
 
 - name: Ensure Docker configuration directory exists
   ansible.builtin.file:

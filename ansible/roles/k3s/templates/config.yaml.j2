@@ -1,4 +1,5 @@
 # K3s configuration for Finsights cluster node: {{ inventory_hostname }}
+node-name: "{{ inventory_hostname }}"
 node-ip: "{{ wireguard_ip.split('/')[0] }}"
 flannel-iface: "wg0"
 
