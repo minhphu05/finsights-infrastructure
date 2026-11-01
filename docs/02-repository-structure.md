@@ -45,6 +45,7 @@ finsights-infrastructure/
     ├── 05-vm-specification.md
     ├── 07-os-hardening.md
     ├── 08-disaster-recovery.md
+    ├── 09-chi-tiet-setup-2-vms.md
     └── runbooks/
         ├── 10-deploy-infrastructure.md
         ├── 11-storage-volume.md
