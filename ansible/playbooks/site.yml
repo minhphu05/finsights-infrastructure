@@ -5,13 +5,6 @@
   gather_facts: false
 
   pre_tasks:
-    - name: Wait for background apt and dpkg locks to release
-      ansible.builtin.shell: |
-        while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || fuser /var/lib/apt/lists/lock >/dev/null 2>&1 || pgrep -f unattended-upgr >/dev/null 2>&1; do
-          sleep 3
-        done
-      changed_when: false
-
     - name: Gather host facts after bootstrap packages are ready
       ansible.builtin.setup:
 
