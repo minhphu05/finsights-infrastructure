@@ -16,4 +16,5 @@ ansible/vault-password-file
 .DS_Store
 *.log
 benchmark-results/
+*kubeconfig*
 
