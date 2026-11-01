@@ -25,6 +25,14 @@
     enabled: true
     state: started
 
+- name: Ensure journald drop-in directory exists
+  ansible.builtin.file:
+    path: /etc/systemd/journald.conf.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
 - name: Install bounded journald retention settings
   ansible.builtin.template:
     src: journald-finsights.conf.j2
@@ -33,6 +41,14 @@
     group: root
     mode: "0644"
   notify: Restart systemd-journald
+
+- name: Ensure SSH daemon drop-in directory exists
+  ansible.builtin.file:
+    path: /etc/ssh/sshd_config.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
 
 - name: Install hardened SSH daemon drop-in
   ansible.builtin.template:
@@ -43,7 +59,6 @@
     mode: "0644"
     validate: /usr/sbin/sshd -t -f %s
   notify: Restart SSH daemon
-
 
 - name: Ensure unattended security updates are enabled
   ansible.builtin.systemd_service:

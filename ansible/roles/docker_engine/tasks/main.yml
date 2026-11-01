@@ -48,6 +48,14 @@
     update_cache: true
     cache_valid_time: 3600
 
+- name: Ensure Docker configuration directory exists
+  ansible.builtin.file:
+    path: /etc/docker
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
 - name: Configure bounded container logs
   ansible.builtin.copy:
     content: "{{ docker_daemon_config | to_nice_json }}\n"
