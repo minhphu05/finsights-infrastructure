@@ -8,7 +8,7 @@ if ! command -v k6 >/dev/null 2>&1; then
   exit 2
 fi
 
-BASE_URL="${FINSIGHTS_BASE_URL:-${ROOMIFY_BASE_URL:-}}"
+BASE_URL="${FINSIGHTS_BASE_URL:-}"
 if [[ -z "${BASE_URL}" ]]; then
   printf 'Set FINSIGHTS_BASE_URL, for example https://finsights.example.com.\n' >&2
   exit 2
@@ -19,9 +19,9 @@ REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 RESULT_DIR="${REPO_ROOT}/benchmark-results"
 mkdir -p "${RESULT_DIR}"
 
-VUS="${FINSIGHTS_BENCHMARK_VUS:-${ROOMIFY_BENCHMARK_VUS:-5}}"
-DURATION="${FINSIGHTS_BENCHMARK_DURATION:-${ROOMIFY_BENCHMARK_DURATION:-60s}}"
-HEALTH_PATH="${FINSIGHTS_HEALTH_PATH:-${ROOMIFY_HEALTH_PATH:-/healthz}}"
+VUS="${FINSIGHTS_BENCHMARK_VUS:-5}"
+DURATION="${FINSIGHTS_BENCHMARK_DURATION:-60s}"
+HEALTH_PATH="${FINSIGHTS_HEALTH_PATH:-/healthz}"
 
 case "${VUS}" in
   ''|*[!0-9]*) printf 'FINSIGHTS_BENCHMARK_VUS must be a positive integer.\n' >&2; exit 2 ;;

@@ -1,36 +1,33 @@
-# Roomify Ubuntu OS hardening baseline
+# Finsights Ubuntu OS Hardening Baseline
 
-This document describes the Ansible baseline applied to the Ubuntu 24.04 ARM64 VM. It complements OCI identity controls and NSG rules; it does not replace them.
+This document describes the Ansible baseline applied to the Ubuntu 24.04 LTS (x86_64) VPS nodes for Finsights.
 
 ## Access and SSH
 
-- Use a named operator account provided by the OCI Ubuntu image (`ubuntu`) and its public-key authentication.
-- Set `PermitRootLogin no`, `PasswordAuthentication no`, and `KbdInteractiveAuthentication no` through the Ansible SSH drop-in.
-- Keep TCP forwarding enabled because Kubernetes API administration may use an SSH tunnel.
-- Restrict TCP 22 at both OCI NSG and UFW to the operator's current IPv4 `/32`.
-- Keep the private key outside the repository and rotate/revoke keys when an operator loses access.
-- Confirm the new SSH session works before ending the existing session after any SSH/firewall change.
+- Key-based authentication only: `PermitRootLogin prohibit-password`, `PasswordAuthentication no`, and `KbdInteractiveAuthentication no` configured via `/etc/ssh/sshd_config.d/60-finsights.conf`.
+- Ports preserved: SSH daemon listens on custom internal port `8686` and standard port `22` (forwarded from external NAT ports `26567` for Node 1 and `26566` for Node 2).
+- Keep TCP and tunnel forwarding enabled (`AllowTcpForwarding yes`, `PermitTunnel yes`) for management and tunnel connectivity.
+- Private SSH keys are kept outside the repository and injected via CI/CD secrets (`SSH_PRIVATE_KEY`) or local operator `~/.ssh/finsights_vps`.
 
-## Host firewall and K3s
+## Host Firewall (UFW) and K3s
 
-The OCI security list has no ingress rules. The NSG is the perimeter and permits only operator SSH plus optional 80/443. UFW denies incoming by default and permits SSH, optional web ports, K3s API only from the VCN range, and K3s pod/service CIDRs required by the single-node CNI. It allows outbound traffic for updates and image pulls.
+- UFW policy: Deny incoming by default, allow outgoing.
+- Rules configured before UFW is enabled:
+  - SSH management ports: `8686`, `22`, and custom node ports (`26567`, `26566`).
+  - WireGuard mesh: UDP port `51820` and all traffic on internal interface `wg0`.
+  - K3s API: TCP port `6443` restricted to WireGuard mesh network (`10.8.0.0/24`).
+  - K3s internal CNI: Pod CIDR (`10.42.0.0/16`) and Service CIDR (`10.43.0.0/16`).
+  - Web ingress: Optional TCP `80` and `443`.
 
-K3s recommends disabling UFW unless the required API and pod/service network rules are configured. The role explicitly keeps UFW and writes those rules before enabling it. Do not open UDP 8472, kubelet, NodePort, PostgreSQL, Redis, or MinIO through the OCI NSG. Review current [K3s networking requirements](https://docs.k3s.io/installation/requirements) after changing cluster CIDRs or topology.
+## Updates, Time, and Logs
 
-Docker-published bridge ports can be diverted before UFW input rules. To avoid that path, the runtime contract uses Docker host networking for PostgreSQL/MinIO/optional Redis, bound only to the stable private VNIC address; MinIO console binds to loopback. Do not declare Compose `ports:` for these host-networked services. K3s pods use the private VM address; UFW admits K3s pod/service CIDRs and OCI NSG still blocks public stateful-service ports. Review [Docker's packet filtering guidance](https://docs.docker.com/engine/network/packet-filtering-firewalls/) and [host network behavior](https://docs.docker.com/engine/network/drivers/host/) if changing this design.
+- Automatic security updates enabled via `unattended-upgrades`.
+- NTP time synchronization enabled via `chrony`.
+- System timezone set to `Asia/Ho_Chi_Minh`.
+- Journald limits: Bounded retention to 512 MB persistent and 256 MB volatile logs.
+- Docker daemon log rotation: Bounded with max-size `10m` and max-file `3`.
 
-## Updates, time, and logs
+## Storage and Service Boundaries
 
-- Install Ubuntu security update support, Chrony, and common inspection tools.
-- Keep unattended security updates enabled. Schedule planned reboots and verify K3s, Docker, mount, and app health afterward.
-- Use `Asia/Ho_Chi_Minh` timezone for operator-facing host logs; application timestamps should remain UTC.
-- Bound journald persistence to 512 MB and volatile logs to 256 MB. Docker logs use the `local` driver with 10 MB / 3-file rotation.
-- Review `/var` and `/srv/roomify-data` usage regularly. Do not enable unbounded debug logs during production traffic.
-
-## Storage and service boundaries
-
-The role mounts the 150 GB block volume by UUID at `/srv/roomify-data`. It does not create or permission application data directories. The deployment repo owns database/object service manifests and container IDs. Keep durable data off the boot volume and back it up outside the VM.
-
-## Operational review
-
-After applying Ansible, check `sudo ufw status verbose`, `sudo sshd -t`, `systemctl is-active docker k3s`, `lsblk -f`, and `findmnt /srv/roomify-data`. Confirm the public IP cannot reach TCP 6443, 5432, 6379, 9000, or 9001. Re-run these checks after rule, OS, or K3s updates.
+- Persistent local data directory is initialized at `/srv/finsights-data` with mode `0750`.
+- Application workloads, PVCs, database storage, and container definitions are managed via Helm charts in the deployment repository.

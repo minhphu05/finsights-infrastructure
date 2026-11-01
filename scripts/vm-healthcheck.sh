@@ -3,7 +3,7 @@
 # Read-only local checks for the Finsights host. Run this script on the VM itself.
 set -Eeuo pipefail
 
-DATA_MOUNT="${FINSIGHTS_DATA_MOUNT:-${ROOMIFY_DATA_MOUNT:-/srv/finsights-data}}"
+DATA_MOUNT="${FINSIGHTS_DATA_MOUNT:-/srv/finsights-data}"
 FAILED=0
 
 check_service() {

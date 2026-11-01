@@ -1,63 +1,45 @@
-# Runbook: triển khai hạ tầng Production
+# Runbook: Triển khai hạ tầng Finsights 2-Node VPS
 
-Runbook này tạo hạ tầng trống và chuẩn bị host. Nó không triển khai API, frontend, PostgreSQL, MinIO hoặc Redis containers.
+Runbook này hướng dẫn cách cấu hình 2 VPS, mạng WireGuard mesh, và khởi tạo cụm K3s. Repo này chỉ quản lý hạ tầng và runtime K3s, không triển khai application containers (các container sẽ được deploy bằng Helm charts trong repo khác).
 
-## Trước khi chạy
+## 1. Thông tin 2 VPS
 
-- Xác nhận Production Home Region và compartment.
-- Kiểm kê Compute, boot/data volumes, reserved/ephemeral IP và backups hiện có; không tạo trùng tài nguyên ghi trong sheet.
-- Xác nhận roomify production image OCID là Ubuntu 24.04 ARM64 cho đúng region.
-- Xác nhận A1 và tổng dung lượng volume còn trong quota; kiểm tra estimate và cost alerts.
-- Cập nhật IP quản trị `/32`; xác nhận key pair.
-- Có bản sao Terraform state được mã hóa và lưu ngoài máy chạy lệnh.
+- **Node 1 (Control Plane):** `103.249.117.232`, SSH Port `26567`, user `root`.
+- **Node 2 (Worker + DB):** `103.249.117.201`, SSH Port `26566`, user `root`.
+- **SSH Key:** Private key tại `~/.ssh/finsights_vps` (đã nạp public key vào `/root/.ssh/authorized_keys` của cả 2 máy).
 
-## Provision OCI
+## 2. Triển khai tự động qua GitHub Actions CI/CD (Khuyến nghị)
 
-```bash
-cd terraform/environments/prod
-cp terraform.tfvars.example terraform.tfvars
-# Sửa terraform.tfvars bằng các giá trị thật; không commit file này.
-terraform init
-terraform fmt -recursive ../../..
-terraform plan -out=roomify-prod.tfplan
-terraform show roomify-prod.tfplan
-```
+1. Đẩy code lên nhánh `main` của repository GitHub:
+   ```bash
+   git push origin main
+   ```
+2. Workflow [.github/workflows/infra-deploy.yml](file:///Users/kittnguyen/Documents/Project/Personal/finsights/finsights-infrastructure/.github/workflows/infra-deploy.yml) sẽ tự động kích hoạt:
+   - Cài đặt Ansible & các collections.
+   - Nạp secret `SSH_PRIVATE_KEY`.
+   - Chạy `ansible-playbook -i ansible/inventory/production.yml ansible/playbooks/site.yml`.
+   - Gắn nhãn các node và kiểm tra trạng thái cụm K3s.
 
-Đọc resource action, region, shape, boot/data volume, public IP và tất cả ingress rules. Nếu plan định tạo một VM mới trong khi VM 2/12/200 hiện hữu đã tồn tại, dừng và chuyển sang quy trình import/reconciliation. Chỉ apply plan đã kiểm tra:
+## 3. Triển khai thủ công từ máy quản trị (Local)
 
-```bash
-terraform apply roomify-prod.tfplan
-```
-
-Lưu OCID/IP outputs trong nơi lưu vận hành phù hợp. Không đăng state/plan công khai.
-
-## Chuẩn bị host
-
-Từ repository root:
+Nếu cần chạy trực tiếp từ máy cục bộ:
 
 ```bash
-export ROOMIFY_SSH_PRIVATE_KEY="$HOME/.ssh/roomify_oci"
-./scripts/render-ansible-inventory.sh prod
+# 1. Cài đặt các collection yêu cầu
 ansible-galaxy collection install -r ansible/requirements.yml
+
+# 2. Kiểm tra kết nối tới 2 VPS
+ansible -i ansible/inventory/production.yml -m ping finsights_hosts
+
+# 3. Thực thi playbook triển khai
+ansible-playbook -i ansible/inventory/production.yml ansible/playbooks/site.yml
 ```
 
-Kiểm tra `ansible/inventory/generated.yml` để xác nhận public/private IP và `/32`. Đối với volume mới hoàn toàn, xem [storage volume runbook](11-storage-volume.md), rồi chạy:
+## 4. Kiểm tra sau triển khai
 
+Kiểm tra trạng thái cụm K3s từ Node 1:
 ```bash
-ansible-playbook ansible/playbooks/site.yml -e initialize_data_volume=true
+ssh -i ~/.ssh/finsights_vps -p 26567 root@103.249.117.232 "k3s kubectl get nodes -o wide"
 ```
 
-Lần tiếp theo không dùng `initialize_data_volume=true`.
-
-## Sau triển khai
-
-```bash
-ansible -m ping roomify_hosts
-ansible-playbook ansible/playbooks/site.yml
-```
-
-Đăng nhập host, chạy `sudo ufw status verbose`, `sudo systemctl is-active docker k3s`, `sudo k3s kubectl get nodes -o wide`, `findmnt /srv/roomify-data`, và `./scripts/vm-healthcheck.sh`. Kiểm tra từ bên ngoài rằng TCP 6443, 5432, 6379, 9000 và 9001 không truy cập được.
-
-## Drift và thay đổi
-
-Sửa Terraform/Ansible trong repo, tạo plan mới, review rồi apply. Không sửa Console ngoài luồng rồi bỏ mặc drift. Thay đổi SSH CIDR cần kiểm tra session hiện tại và rule mới trước khi xóa IP cũ.
+Kết quả mong đợi: Cả 2 nodes (`finsights-prod-node-01` và `finsights-prod-node-02`) đều ở trạng thái `Ready`, với interface `wg0` kết nối mạng nội bộ `10.8.0.1` và `10.8.0.2`.

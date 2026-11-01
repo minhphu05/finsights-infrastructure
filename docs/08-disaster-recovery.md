@@ -1,40 +1,32 @@
-# Roomify infrastructure backup and disaster recovery
+# Finsights Infrastructure Backup & Disaster Recovery
 
-**Target from Review INF-004:** RTO ≤24 hours and RPO ≤24 hours. These are objectives, not guarantees, until the backup destination, schedule, credentials, and restore drill are in place.
+**Mục tiêu khôi phục:** RTO ≤ 24 giờ và RPO ≤ 24 giờ.
 
-## Failure model
+## 1. Mô hình lỗi & Giảm thiểu rủi ro
 
-Production is one VM. The host is a shared failure domain for K3s, Docker, PostgreSQL, MinIO, and the public IP attachment. A boot-volume snapshot alone cannot restore database/object consistency; a snapshot in the same tenancy is not the only backup copy. Keep application-level backups outside the VM and verify they can be read independently.
+Cụm gồm 2 VPS độc lập:
+- **Node 1 (Control Plane):** Chạy K3s Server, Ingress, Cloudflare Tunnel. Nếu Node 1 gặp sự cố, có thể dựng lại K3s Server trên Node 1 mới hoặc thăng cấp Node 2.
+- **Node 2 (Worker + DB):** Chạy PostgreSQL và Worker. Dữ liệu PostgreSQL nằm tại `/srv/finsights-data` (hoặc K3s Local PVC). 
+- **Off-site Backup:** Bắt buộc phải sao lưu dữ liệu PostgreSQL và MinIO ra kho lưu trữ độc lập (Cloudflare R2, AWS S3 hoặc Google Cloud Storage) để phòng ngừa sự cố phần cứng VPS.
 
-## Backup matrix
+## 2. Ma trận sao lưu
 
-| Item | What to preserve | Owner / method | Required location |
+| Thành phần | Dữ liệu cần giữ | Nơi lưu trữ an toàn | Trách nhiệm |
 |---|---|---|---|
-| PostgreSQL | Consistent logical or physical backup, WAL strategy if selected, schema/migrations | `roomify-platform-deployment` coordinates with `roomify-core-db` | Encrypted destination outside this VM; restore test within 24 h objective |
-| MinIO | Objects and required metadata/configuration | `roomify-platform-deployment`; versioning/replication/export plan | Independent object storage or offline copy; checksum sample objects |
-| Kubernetes | K3s server state, cluster token, config, manifests | Platform deployment backup procedure; secrets protected | Encrypted off-VM copy with access limited to operators |
-| Host infrastructure | Terraform state, source code, Ansible inventory inputs, image/version pins | `roomify-infrastructure` | Encrypted private backup; Terraform state never in Git |
-| OCI resources | VM image choice, reserved public IP, volume IDs, NSG/route definitions | Terraform state and OCI inventory | Repository plus protected state backup |
+| **PostgreSQL Database** | Logical dump (`pg_dump`) nén và mã hóa hàng ngày | Cloudflare R2 / S3-compatible | `finsights-platform-deployment` (CronJob) |
+| **Object Storage (MinIO)** | Media assets và tài liệu upload | S3 Bucket độc lập ngoài VPS | `finsights-platform-deployment` |
+| **K3s Secrets & Config** | K3s node token, manifests, Helm values | Git repo deployment & Secret Manager | `finsights-platform-deployment` |
+| **Hạ tầng máy chủ** | Cấu hình Ansible, SSH public keys, UFW rules | Repository `finsights-infrastructure` | `finsights-infrastructure` |
 
-Do not commit SSH private keys, K3s tokens, kubeconfig, database passwords, MinIO secrets, `.env`, or plaintext backup encryption keys.
+## 3. Quy trình khôi phục sự cố (Disaster Recovery)
 
-## Backup cadence and retention
-
-The initial target is at least one PostgreSQL backup and one incremental/full MinIO data copy each day, with a restore point no older than 24 hours. Before beta, record exact schedules, retention, encryption, storage location, failure notifications, and monthly restore drill owner. Also check current OCI Always Free Block Volume backup allowance; don't assume a particular backup count remains available or that it replaces off-VM application backups.
-
-## Restore sequence
-
-1. Declare an incident, record start time, and choose the latest verified backup within the RPO objective.
-2. Recreate OCI network and VM from the production Terraform environment in the confirmed Home Region. If the previous VM is still available, inspect it before replacing anything.
-3. Attach the existing data volume only after confirming its OCID and availability domain; do not format it. If it is lost, create a new volume and restore application data from the independent backup.
-4. Apply Ansible. For an existing filesystem, leave `initialize_data_volume=false`; confirm mount by UUID at `/srv/roomify-data`.
-5. Restore K3s config/secrets according to the protected backup procedure, or build a fresh single-node cluster and reapply manifests from `roomify-platform-deployment`.
-6. Restore PostgreSQL and validate migrations/schema, representative rows, constraints, and application connectivity.
-7. Restore MinIO objects and verify checksums for representative Roomify assets. Confirm bucket policy and access credentials without publishing the console.
-8. Confirm app/worker health, upload/download paths, backups, monitoring, NSG/UFW exposure, and 10-user capacity headroom.
-9. Reassign the reserved public IP if required, then update Cloudflare DNS only after HTTPS and health checks pass.
-10. Record elapsed time and data-loss point. If either exceeds 24 hours, document the gap and revise the backup plan.
-
-## Restore drill record
-
-Keep a dated record in the team's incident log with: source backup ID/time, target environment, checksum results, restore duration, data validation outcome, DNS decision, and corrective actions. Never run a destructive restore drill against production data.
+1. **Khôi phục máy chủ VPS:**
+   - Thuê hoặc khởi động lại VPS mới với cùng cấu hình (Ubuntu 24.04 LTS x86_64).
+   - Cập nhật địa chỉ IP và SSH port vào [ansible/inventory/production.yml](file:///Users/kittnguyen/Documents/Project/Personal/finsights/finsights-infrastructure/ansible/inventory/production.yml).
+2. **Triển khai hạ tầng tự động qua Ansible / CI-CD:**
+   - Chạy workflow GitHub Actions `.github/workflows/infra-deploy.yml` hoặc chạy playbook `site.yml`.
+   - Toàn bộ WireGuard mesh, K3s Server, K3s Agent và phân quyền `/srv/finsights-data` sẽ tự động được thiết lập lại từ đầu.
+3. **Khôi phục ứng dụng & Dữ liệu:**
+   - Chạy pipeline deploy từ repo Helm charts (`finsights-platform-deployment`).
+   - Khôi phục bản dump PostgreSQL gần nhất từ Cloudflare R2 / S3.
+   - Xác minh kết nối từ Vercel Frontend đến API endpoint Cloudflare Tunnel.

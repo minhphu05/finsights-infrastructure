@@ -35,9 +35,9 @@ Role sẽ mount theo UUID và thất bại nếu filesystem khác `data_volume_f
 ## 4. Kiểm tra sau mount/reboot
 
 ```bash
-findmnt /srv/roomify-data
-df -hP /srv/roomify-data
-sudo grep -n '/srv/roomify-data' /etc/fstab
+findmnt /srv/finsights-data
+df -hP /srv/finsights-data
+sudo grep -n '/srv/finsights-data' /etc/fstab
 ```
 
 Sau khi lên kế hoạch downtime, reboot thử và xác nhận mount lại. Không dùng `nofail` làm lý do bỏ qua cảnh báo: nếu volume không gắn, dừng app stateful trước khi ghi vào thư mục rỗng trên boot volume.
